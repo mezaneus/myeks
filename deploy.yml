@@ -1,0 +1,82 @@
+name: Deploy EKS Cluster
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster-name:
+        description: 'EKS Cluster Name'
+        required: true
+        default: 'github-actions-eks'
+      kubernetes-version:
+        description: 'Kubernetes Version'
+        required: true
+        default: '1.30'
+      node-type:
+        description: 'Node Instance Type'
+        required: true
+        default: 't2.medium'
+      node-count:
+        description: 'Number of Nodes'
+        required: true
+        default: '2'
+
+env:
+  CLUSTER_NAME: ${{ github.event.inputs.cluster-name }}
+  K8S_VERSION: ${{ github.event.inputs.kubernetes-version }}
+  NODE_TYPE: ${{ github.event.inputs.node-type }}
+  NODE_COUNT: ${{ github.event.inputs.node-count }}
+
+jobs:
+  deploy-eks:
+    name: Deploy EKS Cluster
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Install eksctl
+      run: |
+        curl --silent --location "https://github.com/weaveworks/eksctl/releases/latest/download/eksctl_$(uname -s)_amd64.tar.gz" | tar xz -C /tmp
+        sudo mv /tmp/eksctl /usr/local/bin
+        eksctl version
+
+    - name: Create EKS cluster
+      run: |
+        eksctl create cluster \
+          --name $CLUSTER_NAME \
+          --version $K8S_VERSION \
+          --region us-east-1 \
+          --nodegroup-name workers \
+          --node-type $NODE_TYPE \
+          --nodes $NODE_COUNT \
+          --nodes-min 1 \
+          --nodes-max 3 \
+          --managed
+
+    - name: Configure kubectl
+      run: |
+        aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME
+        kubectl get nodes
+
+    - name: Store kubeconfig
+      if: always()
+      run: |
+        mkdir -p .kube
+        aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name $CLUSTER_NAME --kubeconfig .kube/config
+      shell: bash
+
+    - name: Upload kubeconfig
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kubeconfig
+        path: .kube/config
