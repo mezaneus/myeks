@@ -71,7 +71,7 @@ jobs:
       if: always()
       run: |
         mkdir -p .kube
-        aws eks --region ${{ secrets.AWS_REGION }} update-kubeconfig --name $CLUSTER_NAME --kubeconfig .kube/config
+        aws eks --region us-east-1 update-kubeconfig --name $CLUSTER_NAME --kubeconfig .kube/config
       shell: bash
 
     - name: Upload kubeconfig
